@@ -4,54 +4,46 @@ resource "aws_vpc" "homelab-vpc" {
   enable_dns_support   = true
 
   tags = {
-    Name = " Homelab "
+    Name = "Homelab"
   }
-
 }
 
 resource "aws_subnet" "public-subnet1" {
   vpc_id                  = aws_vpc.homelab-vpc.id
-  cidr_block              = "10.123.0.0/16"
+  cidr_block              = "10.123.1.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "us-west-2a"
-
 
   tags = {
     Name = "public-subnet1"
   }
 }
 
-
-
 resource "aws_internet_gateway" "homelab-igw" {
   vpc_id = aws_vpc.homelab-vpc.id
 
   tags = {
-    Name = "Homelabs-igw"
+    Name = "Homelab-igw"
   }
-
 }
 
 resource "aws_route_table" "homelab-rt" {
   vpc_id = aws_vpc.homelab-vpc.id
 
   tags = {
-    Name = "Homelabs-rt"
+    Name = "Homelab-rt"
   }
-
 }
-
-
 
 resource "aws_route" "default_route" {
   route_table_id         = aws_route_table.homelab-rt.id
-  destination_cidr_block = "0.0.0.0/16"
+  destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.homelab-igw.id
 }
 
-resource "aws_route_table_association" "homelab-rta" {
+resource "aws_route_table_association" "public_subnet_association" {
+  subnet_id      = aws_subnet.public-subnet1.id
   route_table_id = aws_route_table.homelab-rt.id
-  gateway_id     = aws_internet_gateway.homelab-igw.id
 }
 
 resource "aws_security_group" "public-sg" {
@@ -74,18 +66,15 @@ resource "aws_security_group" "public-sg" {
   }
 }
 
-
 resource "aws_key_pair" "homelab-auth" {
   key_name   = "kb-auth"
-  public_key = file("~/.ssh/id_ecdsa.pub")
-
+  public_key = file("~/.ssh/id_rsa.pub")
 }
 
-
 resource "aws_instance" "dev-node" {
-  instance_type          = "t3-micro"
+  instance_type          = "t3.micro"
   ami                    = data.aws_ami.server_ami.id
-  key_name               = aws_key_pair.homelab-auth.id
+  key_name               = aws_key_pair.homelab-auth.key_name
   vpc_security_group_ids = [aws_security_group.public-sg.id]
   subnet_id              = aws_subnet.public-subnet1.id
   user_data              = file("userdata.tpl")
@@ -96,16 +85,5 @@ resource "aws_instance" "dev-node" {
 
   tags = {
     Name = "dev-node"
-  }
-
-  provisioner "local-exec" {
-    command = templatefile("linux-ssh-config.tpl", {
-      hostname     = self.public_ip
-      user         = "ubuntu"
-      identityFile = "~/.ssh/id_ecdsa"
-
-    })
-    interpreter = ["bash", "-c"]
-
   }
 }
